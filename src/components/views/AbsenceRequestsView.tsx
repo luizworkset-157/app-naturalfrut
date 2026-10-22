@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   UserX,
   Plus,
@@ -60,8 +60,17 @@ export const AbsenceRequestsView: React.FC<AbsenceRequestsViewProps> = ({ select
     authorizationNotes: ''
   });
 
-  const employees = dataStorage.getEmployees().filter((e) => e.status === 'active');
-  const requests = dataStorage.getAbsenceRequests();
+  const [employees, setEmployees] = useState(() => dataStorage.getEmployees().filter((e) => e.status === 'active'));
+  const [requests, setRequests] = useState(() => dataStorage.getAbsenceRequests());
+
+  useEffect(() => {
+    const unsub = dataStorage.subscribe(() => {
+      setEmployees(dataStorage.getEmployees().filter((e) => e.status === 'active'));
+      setRequests(dataStorage.getAbsenceRequests());
+    });
+    return unsub;
+  }, []);
+
   const currentUser = dataStorage.getCurrentUser();
   const isMonthClosed = dataStorage.isMonthClosed(selectedYearMonth);
   const canApprove = (currentUser.role === 'admin' || currentUser.role === 'manager') && !isMonthClosed;

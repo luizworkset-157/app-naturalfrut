@@ -63,6 +63,13 @@ const DEFAULT_SECTORS = [
   'Qualidade'
 ];
 
+const DEFAULT_SHIFTS = [
+  '1º Turno (06h - 14h)',
+  '2º Turno (14h - 22h)',
+  '3º Turno (22h - 06h)',
+  'Horário Comercial (08h - 17h)'
+];
+
 const STORAGE_KEYS = {
   EMPLOYEES: 'ieei_employees_v2',
   ATTENDANCE: 'ieei_attendance_v2',
@@ -78,7 +85,8 @@ const STORAGE_KEYS = {
   CURRENT_USER_ID: 'ieei_current_user_v2',
   FIREBASE_CONFIG: 'ieei_firebase_custom_config_v2',
   ROLES: 'ieei_roles_v2',
-  SECTORS: 'ieei_sectors_v2'
+  SECTORS: 'ieei_sectors_v2',
+  SHIFTS: 'ieei_shifts_v2'
 };
 
 class DataStorageService {
@@ -95,6 +103,7 @@ class DataStorageService {
   private users: UserProfile[] = [];
   private roles: string[] = DEFAULT_ROLES;
   private sectors: string[] = DEFAULT_SECTORS;
+  private shifts: string[] = DEFAULT_SHIFTS;
   private currentUser: UserProfile = INITIAL_USERS[0];
   private isDemoMode: boolean = true;
   private listeners: Set<() => void> = new Set();
@@ -150,12 +159,15 @@ class DataStorageService {
     this.users = this.getItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     this.roles = this.getItem(STORAGE_KEYS.ROLES, DEFAULT_ROLES);
     this.sectors = this.getItem(STORAGE_KEYS.SECTORS, DEFAULT_SECTORS);
+    this.shifts = this.getItem(STORAGE_KEYS.SHIFTS, DEFAULT_SHIFTS);
 
-    // Mesclar funções e setores que porventura já estejam em colaboradores
+    // Mesclar funções, setores e turnos que porventura já estejam em colaboradores
     const empRoles = this.employees.map((e) => e.role).filter(Boolean);
     const empSectors = this.employees.map((e) => e.sector).filter(Boolean);
+    const empShifts = this.employees.map((e) => e.shift).filter(Boolean);
     this.roles = Array.from(new Set([...this.roles, ...empRoles])).sort();
     this.sectors = Array.from(new Set([...this.sectors, ...empSectors])).sort();
+    this.shifts = Array.from(new Set([...this.shifts, ...empShifts])).sort();
 
     const savedUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
     const foundUser = this.users.find((u) => u.id === savedUserId);
@@ -475,6 +487,61 @@ class DataStorageService {
     this.notify();
   }
 
+  // SHIFTS MANAGEMENT
+  public getShifts(): string[] {
+    return [...this.shifts];
+  }
+
+  public addShift(shift: string): void {
+    const clean = shift.trim();
+    if (!clean) throw new Error('O nome do turno não pode ser vazio.');
+    if (this.shifts.some((s) => s.toLowerCase() === clean.toLowerCase())) {
+      throw new Error(`O turno "${clean}" já está cadastrado.`);
+    }
+    this.shifts.push(clean);
+    this.shifts.sort();
+    this.saveItem(STORAGE_KEYS.SHIFTS, this.shifts);
+    this.logAudit('create', 'Shift', clean, `Novo turno cadastrado: ${clean}`);
+    this.notify();
+  }
+
+  public updateShift(oldShift: string, newShift: string): void {
+    const cleanOld = oldShift.trim();
+    const cleanNew = newShift.trim();
+    if (!cleanNew) throw new Error('O novo nome do turno não pode ser vazio.');
+    if (cleanOld.toLowerCase() === cleanNew.toLowerCase()) return;
+
+    this.shifts = this.shifts.map((s) => (s.toLowerCase() === cleanOld.toLowerCase() ? cleanNew : s));
+    this.shifts = Array.from(new Set(this.shifts)).sort();
+    this.saveItem(STORAGE_KEYS.SHIFTS, this.shifts);
+
+    let updatedEmployeesCount = 0;
+    this.employees = this.employees.map((emp) => {
+      if (emp.shift?.toLowerCase() === cleanOld.toLowerCase()) {
+        updatedEmployeesCount++;
+        return { ...emp, shift: cleanNew, updatedAt: new Date().toISOString() };
+      }
+      return emp;
+    });
+    if (updatedEmployeesCount > 0) {
+      this.saveItem(STORAGE_KEYS.EMPLOYEES, this.employees);
+    }
+
+    this.logAudit('update', 'Shift', cleanNew, `Turno alterado de "${cleanOld}" para "${cleanNew}" (${updatedEmployeesCount} colaboradores atualizados)`);
+    this.notify();
+  }
+
+  public deleteShift(shift: string): void {
+    const clean = shift.trim();
+    if (this.shifts.length <= 1) {
+      throw new Error('É necessário manter pelo menos um turno cadastrado.');
+    }
+    this.shifts = this.shifts.filter((s) => s.toLowerCase() !== clean.toLowerCase());
+    this.saveItem(STORAGE_KEYS.SHIFTS, this.shifts);
+    this.logAudit('delete', 'Shift', clean, `Turno excluído da lista: ${clean}`);
+    this.notify();
+  }
+
   // ATTENDANCE MATRIX
   public getAttendanceRecords(): AttendanceRecord[] {
     return [...this.attendanceRecords];
@@ -504,6 +571,8 @@ class DataStorageService {
       this.attendanceRecords.push(record);
     }
 
+    const previousCode = record.dailyCodes[day];
+
     if (code === '') {
       delete record.dailyCodes[day];
     } else {
@@ -513,6 +582,52 @@ class DataStorageService {
     record.updatedBy = this.currentUser.name;
 
     this.saveItem(STORAGE_KEYS.ATTENDANCE, this.attendanceRecords);
+
+    // Integração automática com o módulo Ocorrências de Faltas
+    const absenceDate = `${yearMonth}-${String(day).padStart(2, '0')}`;
+
+    if (code === 'F') {
+      const existingReq = this.absenceRequests.find(
+        (r) => r.employeeId === employeeId && r.absenceDate === absenceDate
+      );
+
+      if (!existingReq) {
+        const newOccurrence: AbsenceRequest = {
+          id: `abs_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          requestDate: new Date().toISOString().split('T')[0],
+          absenceDate,
+          employeeId: emp.id,
+          registrationNumber: emp.registrationNumber,
+          employeeName: emp.name,
+          reasonCode: 'COD06', // Falta injustificada
+          reasonDescription: 'Falta injustificada',
+          hourBankBalanceAtRequest: this.getEmployeeHourBankBalance(emp.id),
+          status: 'pending',
+          impactsAttendance: true,
+          impactsHourBank: false,
+          notes: `Ocorrência gerada automaticamente pelo registro de Falta (F) na Assiduidade (dia ${day}/${yearMonth}).`,
+          createdAt: new Date().toISOString()
+        };
+        this.absenceRequests.unshift(newOccurrence);
+        this.saveItem(STORAGE_KEYS.ABSENCE_REQUESTS, this.absenceRequests);
+        this.logAudit('create', 'AbsenceRequest', newOccurrence.id, `Ocorrência de Falta gerada automaticamente (F): ${emp.name} em ${absenceDate}`);
+      }
+    } else if (previousCode === 'F') {
+      // Se antes era 'F' e foi alterado ou apagado, remove a ocorrência automática correspondente
+      const autoOccurrenceIndex = this.absenceRequests.findIndex(
+        (r) =>
+          r.employeeId === employeeId &&
+          r.absenceDate === absenceDate &&
+          r.reasonCode === 'COD06' &&
+          r.notes?.includes('gerada automaticamente pelo registro de Falta (F)')
+      );
+      if (autoOccurrenceIndex >= 0) {
+        const removed = this.absenceRequests.splice(autoOccurrenceIndex, 1)[0];
+        this.saveItem(STORAGE_KEYS.ABSENCE_REQUESTS, this.absenceRequests);
+        this.logAudit('delete', 'AbsenceRequest', removed.id, `Ocorrência automática de falta removida: ${emp.name} em ${absenceDate}`);
+      }
+    }
+
     this.notify();
   }
 
@@ -914,27 +1029,87 @@ class DataStorageService {
     this.notify();
   }
 
-  public reopenMonth(yearMonth: string, justification: string) {
-    if (this.currentUser.role !== 'admin') {
-      throw new Error('Apenas Administradores têm permissão para reabrir períodos fechados.');
-    }
-    if (!justification || justification.trim().length < 10) {
-      throw new Error('A reabertura exige uma justificativa formal com no mínimo 10 caracteres.');
-    }
+  public reopenMonth(yearMonth: string, justification?: string) {
+    const finalReason =
+      justification && justification.trim().length >= 3
+        ? justification.trim()
+        : 'Reabertura formal autorizada para apuração de ponto e ajustes.';
 
     const existing = this.monthlyClosings.find((c) => c.yearMonth === yearMonth);
     const now = new Date().toISOString();
+    const actorName = this.currentUser?.name || 'Administrador do Sistema';
 
     if (existing) {
       existing.isClosed = false;
       existing.reopenedAt = now;
-      existing.reopenedBy = this.currentUser.name;
-      existing.reopenReason = justification;
+      existing.reopenedBy = actorName;
+      existing.reopenReason = finalReason;
+    } else {
+      this.monthlyClosings.push({
+        id: `close_${yearMonth.replace('-', '_')}`,
+        yearMonth,
+        isClosed: false,
+        reopenedAt: now,
+        reopenedBy: actorName,
+        reopenReason: finalReason
+      });
     }
 
     this.saveItem(STORAGE_KEYS.CLOSINGS, this.monthlyClosings);
-    this.logAudit('reopen_month', 'MonthlyClosing', yearMonth, `Reabertura do mês ${yearMonth}. Justificativa: ${justification}`);
+    this.logAudit('reopen_month', 'MonthlyClosing', yearMonth, `Reabertura do mês ${yearMonth}. Justificativa: ${finalReason}`);
     this.notify();
+  }
+
+  /**
+   * Retorna todos os períodos disponíveis com seus status de fechamento,
+   * servindo como fonte única da verdade para seletores globais e telas de configuração.
+   */
+  public getAvailablePeriods(): { value: string; label: string; isClosed: boolean }[] {
+    const defaultPeriods = ['2026-11', '2026-10', '2026-09', '2026-08'];
+    const fromClosings = this.monthlyClosings.map((c) => c.yearMonth);
+    const fromAtt = this.attendanceRecords.map((a) => a.yearMonth);
+    const fromDelays = this.delayOccurrences.map((d) => d.date.substring(0, 7));
+    const fromLunch = this.lunchIntervals.map((l) => l.date.substring(0, 7));
+    const fromHb = this.hourBankTransactions.map((h) => h.date.substring(0, 7));
+
+    const allPeriods = Array.from(
+      new Set([
+        ...defaultPeriods,
+        ...fromClosings,
+        ...fromAtt,
+        ...fromDelays,
+        ...fromLunch,
+        ...fromHb
+      ])
+    ).filter((p) => /^\d{4}-\d{2}$/.test(p));
+
+    allPeriods.sort().reverse();
+
+    const monthNames: Record<string, string> = {
+      '01': 'Janeiro',
+      '02': 'Fevereiro',
+      '03': 'Março',
+      '04': 'Abril',
+      '05': 'Maio',
+      '06': 'Junho',
+      '07': 'Julho',
+      '08': 'Agosto',
+      '09': 'Setembro',
+      '10': 'Outubro',
+      '11': 'Novembro',
+      '12': 'Dezembro'
+    };
+
+    return allPeriods.map((ym) => {
+      const isClosed = this.isMonthClosed(ym);
+      const [year, month] = ym.split('-');
+      const name = monthNames[month] || month;
+      return {
+        value: ym,
+        label: `${name} / ${year} (${isClosed ? 'Fechado' : 'Aberto'})`,
+        isClosed
+      };
+    });
   }
 
   // AUDIT LOGS
@@ -1101,6 +1276,9 @@ class DataStorageService {
     this.monthlyClosings = INITIAL_MONTHLY_CLOSINGS;
     this.auditLogs = INITIAL_AUDIT_LOGS;
     this.users = INITIAL_USERS;
+    this.roles = DEFAULT_ROLES;
+    this.sectors = DEFAULT_SECTORS;
+    this.shifts = DEFAULT_SHIFTS;
 
     Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
     this.isDemoMode = true;
@@ -1124,7 +1302,10 @@ class DataStorageService {
         collectiveIndicators: this.collectiveIndicators,
         monthlyClosings: this.monthlyClosings,
         auditLogs: this.auditLogs,
-        users: this.users
+        users: this.users,
+        roles: this.roles,
+        sectors: this.sectors,
+        shifts: this.shifts
       }
     };
     return JSON.stringify(backup, null, 2);
@@ -1145,6 +1326,9 @@ class DataStorageService {
       if (parsed.data.collectiveIndicators) this.collectiveIndicators = parsed.data.collectiveIndicators;
       if (parsed.data.monthlyClosings) this.monthlyClosings = parsed.data.monthlyClosings;
       if (parsed.data.users) this.users = parsed.data.users;
+      if (parsed.data.roles) this.roles = parsed.data.roles;
+      if (parsed.data.sectors) this.sectors = parsed.data.sectors;
+      if (parsed.data.shifts) this.shifts = parsed.data.shifts;
 
       this.saveItem(STORAGE_KEYS.EMPLOYEES, this.employees);
       this.saveItem(STORAGE_KEYS.ATTENDANCE, this.attendanceRecords);
@@ -1156,6 +1340,9 @@ class DataStorageService {
       this.saveItem(STORAGE_KEYS.COLLECTIVE, this.collectiveIndicators);
       this.saveItem(STORAGE_KEYS.CLOSINGS, this.monthlyClosings);
       this.saveItem(STORAGE_KEYS.USERS, this.users);
+      this.saveItem(STORAGE_KEYS.ROLES, this.roles);
+      this.saveItem(STORAGE_KEYS.SECTORS, this.sectors);
+      this.saveItem(STORAGE_KEYS.SHIFTS, this.shifts);
 
       this.logAudit('import', 'SystemBackup', 'all', 'Restauração de backup do sistema concluída com sucesso');
       this.notify();

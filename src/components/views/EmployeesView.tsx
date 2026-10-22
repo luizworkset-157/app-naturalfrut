@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users,
   UserPlus,
@@ -37,7 +37,7 @@ export const EmployeesView: React.FC = () => {
   // Modal de Exclusão de Colaborador (Substitui confirm do browser que falha em iframes)
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
 
-  // Modais de Gerenciamento de Funções e Setores
+  // Modais de Gerenciamento de Funções, Setores e Turnos
   const [isManageRolesOpen, setIsManageRolesOpen] = useState(false);
   const [newRoleInput, setNewRoleInput] = useState('');
   const [editingRoleIndex, setEditingRoleIndex] = useState<number | null>(null);
@@ -48,6 +48,11 @@ export const EmployeesView: React.FC = () => {
   const [editingSectorIndex, setEditingSectorIndex] = useState<number | null>(null);
   const [editingSectorText, setEditingSectorText] = useState('');
 
+  const [isManageShiftsOpen, setIsManageShiftsOpen] = useState(false);
+  const [newShiftInput, setNewShiftInput] = useState('');
+  const [editingShiftIndex, setEditingShiftIndex] = useState<number | null>(null);
+  const [editingShiftText, setEditingShiftText] = useState('');
+
   // Feedback Toast
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
@@ -56,9 +61,20 @@ export const EmployeesView: React.FC = () => {
     setTimeout(() => setFeedbackMessage(null), 3000);
   };
 
-  const employees = dataStorage.getEmployees();
-  const roles = dataStorage.getRoles();
-  const sectors = dataStorage.getSectors();
+  const [employees, setEmployees] = useState(() => dataStorage.getEmployees());
+  const [roles, setRoles] = useState(() => dataStorage.getRoles());
+  const [sectors, setSectors] = useState(() => dataStorage.getSectors());
+  const [shifts, setShifts] = useState(() => dataStorage.getShifts());
+
+  useEffect(() => {
+    const unsub = dataStorage.subscribe(() => {
+      setEmployees(dataStorage.getEmployees());
+      setRoles(dataStorage.getRoles());
+      setSectors(dataStorage.getSectors());
+      setShifts(dataStorage.getShifts());
+    });
+    return unsub;
+  }, []);
 
   const currentUser = dataStorage.getCurrentUser();
   const canEdit = currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'supervisor';
@@ -69,7 +85,7 @@ export const EmployeesView: React.FC = () => {
     name: '',
     role: roles[0] || 'Operador de Produção',
     sector: sectors[0] || 'Operações',
-    shift: '1º Turno (06h - 14h)',
+    shift: shifts[0] || '1º Turno (06h - 14h)',
     admissionDate: new Date().toISOString().split('T')[0],
     status: 'active' as EmployeeStatus,
     notes: ''
@@ -97,7 +113,7 @@ export const EmployeesView: React.FC = () => {
       name: '',
       role: roles[0] || 'Operador de Produção',
       sector: sectors[0] || 'Operações',
-      shift: '1º Turno (06h - 14h)',
+      shift: shifts[0] || '1º Turno (06h - 14h)',
       admissionDate: new Date().toISOString().split('T')[0],
       status: 'active',
       notes: ''
@@ -241,6 +257,52 @@ export const EmployeesView: React.FC = () => {
       setFormData((prev) => ({ ...prev, sector: remaining[0] || '' }));
     }
     showFeedback(`Setor "${sectorToDelete}" excluído da lista.`);
+  };
+
+  // Funções de Gerenciamento de TURNO
+  const handleAddShift = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newShiftInput.trim()) return;
+    try {
+      dataStorage.addShift(newShiftInput);
+      setFormData((prev) => ({ ...prev, shift: newShiftInput.trim() }));
+      setNewShiftInput('');
+      showFeedback('Novo turno adicionado à lista!');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleSaveEditShift = (oldShift: string) => {
+    if (!editingShiftText.trim()) return;
+    try {
+      dataStorage.updateShift(oldShift, editingShiftText);
+      if (formData.shift === oldShift) {
+        setFormData((prev) => ({ ...prev, shift: editingShiftText.trim() }));
+      }
+      setEditingShiftIndex(null);
+      setEditingShiftText('');
+      showFeedback('Turno atualizado com sucesso!');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteShift = (shiftToDelete: string) => {
+    if (shifts.length <= 1) {
+      alert('É necessário manter pelo menos um turno cadastrado.');
+      return;
+    }
+    try {
+      dataStorage.deleteShift(shiftToDelete);
+      if (formData.shift === shiftToDelete) {
+        const remaining = dataStorage.getShifts();
+        setFormData((prev) => ({ ...prev, shift: remaining[0] || '' }));
+      }
+      showFeedback(`Turno "${shiftToDelete}" excluído da lista.`);
+    } catch (err: any) {
+      alert(err.message);
+    }
   };
 
   const handleExportExcel = () => {
@@ -576,21 +638,34 @@ export const EmployeesView: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Turno:</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">
+                      Turno: *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsManageShiftsOpen(true)}
+                      className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <Settings2 className="w-3 h-3" /> Gerenciar Turnos
+                    </button>
+                  </div>
                   <select
                     value={formData.shift}
+                    required
                     onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium"
                   >
-                    <option value="1º Turno (06h - 14h)">1º Turno (06h - 14h)</option>
-                    <option value="2º Turno (14h - 22h)">2º Turno (14h - 22h)</option>
-                    <option value="3º Turno (22h - 06h)">3º Turno (22h - 06h)</option>
-                    <option value="Horário Comercial (08h - 17h)">Horário Comercial (08h - 17h)</option>
+                    {shifts.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Data de Admissão:</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Data de Admissão: *</label>
                   <input
                     type="date"
                     required
@@ -952,6 +1027,134 @@ export const EmployeesView: React.FC = () => {
                   setEditingSectorIndex(null);
                 }}
                 className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs"
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE GERENCIAMENTO DE TURNOS (Adicionar, Editar e Excluir) */}
+      {isManageShiftsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xl text-xs space-y-4">
+            <button
+              onClick={() => {
+                setIsManageShiftsOpen(false);
+                setEditingShiftIndex(null);
+              }}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-emerald-600" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Gerenciar Lista de Turnos
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Adicione novos turnos operacionais ou edite/exclua os turnos existentes
+                </p>
+              </div>
+            </div>
+
+            {/* Formulário para Adicionar Novo Turno */}
+            <form onSubmit={handleAddShift} className="flex gap-2">
+              <input
+                type="text"
+                value={newShiftInput}
+                onChange={(e) => setNewShiftInput(e.target.value)}
+                placeholder="Ex: 4º Turno Noturno (00h - 08h)..."
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+              />
+              <button
+                type="submit"
+                className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1 shrink-0 shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar
+              </button>
+            </form>
+
+            {/* Lista com Edição e Exclusão */}
+            <div className="max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800">
+              {shifts.map((s, idx) => {
+                const isEditing = editingShiftIndex === idx;
+
+                return (
+                  <div
+                    key={s}
+                    className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  >
+                    {isEditing ? (
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <input
+                          type="text"
+                          value={editingShiftText}
+                          autoFocus
+                          onChange={(e) => setEditingShiftText(e.target.value)}
+                          className="flex-1 px-2 py-1 text-xs rounded border border-emerald-400 bg-white dark:bg-slate-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditShift(s)}
+                          className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer"
+                          title="Salvar Alteração"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingShiftIndex(null)}
+                          className="p-1 rounded text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                          title="Cancelar"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                          {s}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingShiftIndex(idx);
+                              setEditingShiftText(s);
+                            }}
+                            className="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition cursor-pointer"
+                            title="Editar nome do turno"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShift(s)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition cursor-pointer"
+                            title="Excluir turno da lista"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManageShiftsOpen(false);
+                  setEditingShiftIndex(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs cursor-pointer"
               >
                 Concluir
               </button>

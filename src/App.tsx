@@ -15,6 +15,7 @@ import { AuditHistoryView } from './components/views/AuditHistoryView';
 import { SettingsView } from './components/views/SettingsView';
 import { UsersView } from './components/views/UsersView';
 import { FirebaseSetupModal } from './components/modals/FirebaseSetupModal';
+import { GoogleDriveSyncModal } from './components/modals/GoogleDriveSyncModal';
 import { CommandPaletteModal } from './components/modals/CommandPaletteModal';
 import { dataStorage } from './services/dataStorage';
 
@@ -29,6 +30,7 @@ export default function App() {
     return (localStorage.getItem('ieei_layout_mode') as LayoutMode) || 'topbar';
   });
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
+  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [, setTick] = useState(0);
 
@@ -100,6 +102,7 @@ export default function App() {
           <SettingsView
             selectedYearMonth={selectedYearMonth}
             onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
+            onOpenGoogleDriveModal={() => setIsGoogleDriveModalOpen(true)}
           />
         );
       case 'users':
@@ -116,6 +119,7 @@ export default function App() {
         selectedYearMonth={selectedYearMonth}
         onYearMonthChange={setSelectedYearMonth}
         onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
+        onOpenGoogleDriveModal={() => setIsGoogleDriveModalOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onNavigate={setCurrentModule}
         sidebarOpen={sidebarOpen}
@@ -157,6 +161,12 @@ export default function App() {
       <FirebaseSetupModal
         isOpen={isFirebaseModalOpen}
         onClose={() => setIsFirebaseModalOpen(false)}
+      />
+
+      {/* Modal de Sincronização Google Drive */}
+      <GoogleDriveSyncModal
+        isOpen={isGoogleDriveModalOpen}
+        onClose={() => setIsGoogleDriveModalOpen(false)}
       />
 
       {/* Modal de Busca Rápida e Comandos (Ctrl + K) */}

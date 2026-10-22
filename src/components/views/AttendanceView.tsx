@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   CalendarCheck,
   Search,
@@ -13,7 +13,8 @@ import {
   LogOut,
   FileCheck,
   CheckCircle,
-  Percent
+  Percent,
+  Check
 } from 'lucide-react';
 import { dataStorage } from '../../services/dataStorage';
 import { AttendanceCode } from '../../types';
@@ -29,8 +30,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ selectedYearMont
   const [filterSector, setFilterSector] = useState('all');
   const [viewMode, setViewMode] = useState<'matrix' | 'calendar'>('matrix');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const employees = dataStorage.getEmployees().filter((e) => e.status === 'active');
+  const [employees, setEmployees] = useState(() => dataStorage.getEmployees().filter((e) => e.status === 'active'));
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const unsub = dataStorage.subscribe(() => {
+      setEmployees(dataStorage.getEmployees().filter((e) => e.status === 'active'));
+      setTick((t) => t + 1);
+    });
+    return unsub;
+  }, []);
+
   const isMonthClosed = dataStorage.isMonthClosed(selectedYearMonth);
   const currentUser = dataStorage.getCurrentUser();
   const canEdit = !isMonthClosed && currentUser.role !== 'operator';
@@ -105,6 +117,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ selectedYearMont
     if (!canEdit) return;
     try {
       dataStorage.setAttendanceCode(empId, selectedYearMonth, day, code);
+      if (code === 'F') {
+        const emp = employees.find((e) => e.id === empId);
+        setToastMessage(`Falta (F) registrada para ${emp?.name || 'o colaborador'} (dia ${String(day).padStart(2, '0')}/${selectedYearMonth}). Ocorrência gerada no módulo Ocorrências de Faltas!`);
+        setTimeout(() => setToastMessage(null), 4500);
+      }
     } catch (err: any) {
       alert(err.message);
     }
@@ -164,6 +181,22 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ selectedYearMont
 
   return (
     <div className="space-y-6">
+      {/* Toast Feedback de Registro Automático de Falta */}
+      {toastMessage && (
+        <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-semibold flex items-center justify-between shadow-xs transition animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-300 p-1 text-base leading-none cursor-pointer"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div>

@@ -57,7 +57,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     { id: 'hour_bank', name: 'Livro de Movimentações do Banco de Horas', cat: 'Jornada & Frequência', icon: Hourglass },
     { id: 'employees', name: 'Cadastro Central de Colaboradores', cat: 'Administração', icon: Users },
     { id: 'audit', name: 'Trilha de Auditoria & Histórico', cat: 'Administração', icon: History },
-    { id: 'settings', name: 'Configurações de Metas & Fechamento', cat: 'Administração', icon: Settings },
+    { id: 'settings', name: 'Configurações de Metas, Backup & Google Drive', cat: 'Administração', icon: Settings },
     { id: 'users', name: 'Gestão de Usuários e Perfis RBAC', cat: 'Administração', icon: ShieldCheck }
   ];
 

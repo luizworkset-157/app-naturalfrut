@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bell,
   Database,
@@ -10,7 +10,8 @@ import {
   AlertCircle,
   Menu,
   ChevronDown,
-  Search
+  Search,
+  Lock
 } from 'lucide-react';
 import { dataStorage } from '../../services/dataStorage';
 import { UserRole } from '../../types';
@@ -21,6 +22,7 @@ interface HeaderProps {
   selectedYearMonth: string;
   onYearMonthChange: (ym: string) => void;
   onOpenFirebaseModal: () => void;
+  onOpenGoogleDriveModal?: () => void;
   onOpenCommandPalette: () => void;
   onNavigate: (module: string) => void;
   sidebarOpen: boolean;
@@ -48,15 +50,22 @@ export const Header: React.FC<HeaderProps> = ({
   const isDemo = dataStorage.getIsDemoMode();
   const notifications = dataStorage.getSystemNotifications();
 
+  const [availablePeriods, setAvailablePeriods] = useState(() => dataStorage.getAvailablePeriods());
+
+  useEffect(() => {
+    const unsubStorage = dataStorage.subscribe(() => {
+      setAvailablePeriods(dataStorage.getAvailablePeriods());
+    });
+    return () => {
+      unsubStorage();
+    };
+  }, []);
+
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
-  const months = [
-    { value: '2026-10', label: 'Outubro / 2026' },
-    { value: '2026-09', label: 'Setembro / 2026 (Fechado)' },
-    { value: '2026-08', label: 'Agosto / 2026' },
-    { value: '2026-11', label: 'Novembro / 2026' }
-  ];
+  const currentPeriod = availablePeriods.find((p) => p.value === selectedYearMonth);
+  const isCurrentMonthClosed = Boolean(currentPeriod?.isClosed);
 
   const handleRoleSelect = (role: UserRole) => {
     dataStorage.switchRole(role);
@@ -117,19 +126,35 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Centro: Seletor Global de Período Mês/Ano */}
-      <div className="flex items-center gap-2 bg-[#1E3E62]/80 px-3 py-1.5 rounded-lg border border-slate-700">
-        <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+      <div
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition ${
+          isCurrentMonthClosed
+            ? 'bg-rose-950/60 border-rose-600/70 text-rose-200'
+            : 'bg-[#1E3E62]/80 border-slate-700 text-white'
+        }`}
+        title={isCurrentMonthClosed ? 'Período formalmente FECHADO para alterações' : 'Período ABERTO para lançamentos'}
+      >
+        {isCurrentMonthClosed ? (
+          <Lock className="w-4 h-4 text-rose-400 shrink-0" />
+        ) : (
+          <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+        )}
         <select
           value={selectedYearMonth}
           onChange={(e) => onYearMonthChange(e.target.value)}
           className="bg-transparent text-xs font-semibold text-white focus:outline-hidden cursor-pointer"
         >
-          {months.map((m) => (
+          {availablePeriods.map((m) => (
             <option key={m.value} value={m.value} className="bg-[#0B192C] text-white">
               {m.label}
             </option>
           ))}
         </select>
+        {isCurrentMonthClosed && (
+          <span className="hidden sm:inline-block px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-rose-600 text-white uppercase tracking-wider">
+            Fechado
+          </span>
+        )}
       </div>
 
       {/* Direita: Seletor de Layout, Badges, Notificações, Perfil, Modo Escuro */}
@@ -181,6 +206,8 @@ export const Header: React.FC<HeaderProps> = ({
           {isDemo ? 'MODO DEMO' : 'FIREBASE'}
           <Database className="w-3.5 h-3.5 text-amber-300 ml-0.5" />
         </button>
+
+
 
         {/* Notificações */}
         <div className="relative">
