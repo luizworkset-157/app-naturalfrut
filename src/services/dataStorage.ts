@@ -628,6 +628,67 @@ class DataStorageService {
       }
     }
 
+    // Integração automática com o módulo Ocorrências de Atrasos
+    if (code === 'A') {
+      const existingDelay = this.delayOccurrences.find(
+        (d) => d.employeeId === employeeId && d.date === absenceDate
+      );
+
+      if (!existingDelay) {
+        let expectedTime = '08:00';
+        let actualTime = '08:25';
+
+        if (emp.shift?.includes('06h')) {
+          expectedTime = '06:00';
+          actualTime = '06:25';
+        } else if (emp.shift?.includes('14h')) {
+          expectedTime = '14:00';
+          actualTime = '14:25';
+        } else if (emp.shift?.includes('22h')) {
+          expectedTime = '22:00';
+          actualTime = '22:25';
+        }
+
+        const existingInMonth = this.delayOccurrences.filter(
+          (d) => d.employeeId === employeeId && d.date.startsWith(yearMonth)
+        ).length;
+
+        const newDelay: DelayOccurrence = {
+          id: `del_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          date: absenceDate,
+          employeeId: emp.id,
+          registrationNumber: emp.registrationNumber,
+          employeeName: emp.name,
+          reasonCode: 'ATRASO',
+          reasonDescription: 'Atraso injustificado',
+          expectedTime,
+          actualTime,
+          delayMinutes: 25,
+          recurrenceCountInMonth: existingInMonth + 1,
+          justification: `Ocorrência gerada automaticamente pelo lançamento de Atraso (A) na Assiduidade (dia ${day}/${yearMonth}).`,
+          reporter: this.currentUser.name,
+          createdAt: new Date().toISOString()
+        };
+
+        this.delayOccurrences.unshift(newDelay);
+        this.saveItem(STORAGE_KEYS.DELAY_OCCURRENCES, this.delayOccurrences);
+        this.logAudit('create', 'DelayOccurrence', newDelay.id, `Ocorrência de Atraso gerada automaticamente (A): ${emp.name} em ${absenceDate}`);
+      }
+    } else if (previousCode === 'A') {
+      // Se antes era 'A' e foi alterado ou apagado, remove a ocorrência automática de atraso correspondente
+      const autoDelayIndex = this.delayOccurrences.findIndex(
+        (d) =>
+          d.employeeId === employeeId &&
+          d.date === absenceDate &&
+          d.justification?.includes('gerada automaticamente pelo lançamento de Atraso (A)')
+      );
+      if (autoDelayIndex >= 0) {
+        const removed = this.delayOccurrences.splice(autoDelayIndex, 1)[0];
+        this.saveItem(STORAGE_KEYS.DELAY_OCCURRENCES, this.delayOccurrences);
+        this.logAudit('delete', 'DelayOccurrence', removed.id, `Ocorrência automática de atraso removida: ${emp.name} em ${absenceDate}`);
+      }
+    }
+
     this.notify();
   }
 
@@ -768,12 +829,13 @@ class DataStorageService {
       createdAt: new Date().toISOString()
     };
 
-    const day = parseInt(delay.date.split('-')[2], 10);
-    this.setAttendanceCode(delay.employeeId, ym, day, 'A');
-
     this.delayOccurrences.unshift(newDelay);
     this.saveItem(STORAGE_KEYS.DELAY_OCCURRENCES, this.delayOccurrences);
     this.logAudit('create', 'DelayOccurrence', newDelay.id, `Atraso registrado: ${newDelay.employeeName} (${newDelay.delayMinutes} min)`);
+
+    const day = parseInt(delay.date.split('-')[2], 10);
+    this.setAttendanceCode(delay.employeeId, ym, day, 'A');
+
     this.notify();
     return newDelay;
   }

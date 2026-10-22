@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ClockAlert,
   Plus,
@@ -46,8 +46,23 @@ export const DelayOccurrencesView: React.FC<DelayOccurrencesViewProps> = ({ sele
   const [startDate, setStartDate] = useState<string>(defaultStartDate);
   const [endDate, setEndDate] = useState<string>(defaultEndDate);
 
-  const employees = dataStorage.getEmployees().filter((e) => e.status === 'active');
-  const delayOccurrences = dataStorage.getDelayOccurrences();
+  const [employees, setEmployees] = useState(() => dataStorage.getEmployees().filter((e) => e.status === 'active'));
+  const [delayOccurrences, setDelayOccurrences] = useState(() => dataStorage.getDelayOccurrences());
+
+  useEffect(() => {
+    const unsub = dataStorage.subscribe(() => {
+      setEmployees(dataStorage.getEmployees().filter((e) => e.status === 'active'));
+      setDelayOccurrences(dataStorage.getDelayOccurrences());
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const lastDay = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10), 0).getDate();
+    setStartDate(`${selectedYearMonth}-01`);
+    setEndDate(`${selectedYearMonth}-${String(lastDay).padStart(2, '0')}`);
+  }, [selectedYearMonth, yearStr, monthStr]);
+
   const config = dataStorage.getConfig();
   const currentUser = dataStorage.getCurrentUser();
   const isMonthClosed = dataStorage.isMonthClosed(selectedYearMonth);
