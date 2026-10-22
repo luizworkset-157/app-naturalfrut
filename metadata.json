@@ -1,0 +1,6 @@
+{
+  "name": "IEEI Gestão - Sistema de Eficiência e Eficácia Individual",
+  "description": "Sistema corporativo para gestão, acompanhamento e automação de indicadores de eficiência e eficácia individual (IEEI), assiduidade, pontualidade, controle de almoço e banco de horas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

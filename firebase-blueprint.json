@@ -1,0 +1,221 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User profile with role-based access control.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "name": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["admin", "manager", "supervisor", "operator"] },
+        "team": { "type": "string", "maxLength": 80 },
+        "sector": { "type": "string", "maxLength": 80 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email", "name", "role"]
+    },
+    "employee": {
+      "title": "Employee",
+      "description": "Employee master record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "registrationNumber": { "type": "string", "maxLength": 32 },
+        "name": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "maxLength": 80 },
+        "team": { "type": "string", "maxLength": 80 },
+        "sector": { "type": "string", "maxLength": 80 },
+        "supervisor": { "type": "string", "maxLength": 120 },
+        "shift": { "type": "string", "maxLength": 40 },
+        "admissionDate": { "type": "string", "maxLength": 10 },
+        "status": { "type": "string", "enum": ["active", "leave", "vacation", "terminated"] },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "registrationNumber", "name", "role", "team", "sector", "status"]
+    },
+    "attendanceRecord": {
+      "title": "Attendance Record",
+      "description": "Daily attendance status per employee.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "registrationNumber": { "type": "string", "maxLength": 32 },
+        "yearMonth": { "type": "string", "maxLength": 7 },
+        "dailyCodes": { "type": "string", "maxLength": 500 },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "employeeId", "registrationNumber", "yearMonth"]
+    },
+    "absenceRequest": {
+      "title": "Absence Request",
+      "description": "Employee absence or leave authorization request.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "requestDate": { "type": "string", "maxLength": 10 },
+        "absenceDate": { "type": "string", "maxLength": 10 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "registrationNumber": { "type": "string", "maxLength": 32 },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "reasonCode": { "type": "string", "maxLength": 16 },
+        "reasonDescription": { "type": "string", "maxLength": 160 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "authorizedBy": { "type": "string", "maxLength": 120 },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "requestDate", "absenceDate", "employeeId", "reasonCode", "status"]
+    },
+    "delayOccurrence": {
+      "title": "Delay Occurrence",
+      "description": "Employee delay log with planned vs actual times.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 10 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "registrationNumber": { "type": "string", "maxLength": 32 },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "reasonCode": { "type": "string", "maxLength": 16 },
+        "reasonDescription": { "type": "string", "maxLength": 160 },
+        "expectedTime": { "type": "string", "maxLength": 8 },
+        "actualTime": { "type": "string", "maxLength": 8 },
+        "delayMinutes": { "type": "number" },
+        "justification": { "type": "string", "maxLength": 500 },
+        "reporter": { "type": "string", "maxLength": 120 }
+      },
+      "required": ["id", "date", "employeeId", "expectedTime", "actualTime", "delayMinutes"]
+    },
+    "lunchInterval": {
+      "title": "Lunch Interval",
+      "description": "Lunch break interval tracking and excess detection.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 10 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "registrationNumber": { "type": "string", "maxLength": 32 },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "exitTime": { "type": "string", "maxLength": 16 },
+        "returnTime": { "type": "string", "maxLength": 16 },
+        "intervalMinutes": { "type": "number" },
+        "allowedMinutes": { "type": "number" },
+        "excessMinutes": { "type": "number" },
+        "justification": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "date", "employeeId", "exitTime", "returnTime", "intervalMinutes", "allowedMinutes", "excessMinutes"]
+    },
+    "hourBankTransaction": {
+      "title": "Hour Bank Transaction",
+      "description": "Ledger entry for employee hour bank balance.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "registrationNumber": { "type": "string", "maxLength": 32 },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "date": { "type": "string", "maxLength": 10 },
+        "type": { "type": "string", "enum": ["credit", "debit", "overtime", "compensation", "authorized_adjustment", "occurrence_discount"] },
+        "minutes": { "type": "number" },
+        "justification": { "type": "string", "maxLength": 300 },
+        "reporter": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      },
+      "required": ["id", "employeeId", "date", "type", "minutes", "status"]
+    },
+    "indicatorConfig": {
+      "title": "Indicator Configuration",
+      "description": "System-wide targets and calculation formulas.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "attendanceTarget": { "type": "number" },
+        "punctualityTarget": { "type": "number" },
+        "lunchComplianceTarget": { "type": "number" },
+        "combinedTarget": { "type": "number" },
+        "individualWeight": { "type": "number" },
+        "collectiveWeight": { "type": "number" },
+        "defaultLunchMinutes": { "type": "number" },
+        "alertDelayThresholdMinutes": { "type": "number" },
+        "alertDelayMonthlyRecurrence": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "updatedBy": { "type": "string", "maxLength": 120 }
+      },
+      "required": ["id", "attendanceTarget", "punctualityTarget", "lunchComplianceTarget"]
+    },
+    "monthlyClosing": {
+      "title": "Monthly Closing",
+      "description": "Locked monthly period to prevent edits.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "yearMonth": { "type": "string", "maxLength": 7 },
+        "isClosed": { "type": "boolean" },
+        "closedAt": { "type": "string", "maxLength": 64 },
+        "closedBy": { "type": "string", "maxLength": 120 },
+        "reopenReason": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "yearMonth", "isClosed"]
+    },
+    "auditLog": {
+      "title": "Audit Log",
+      "description": "System audit trail for compliance and tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 120 },
+        "action": { "type": "string", "maxLength": 80 },
+        "entity": { "type": "string", "maxLength": 80 },
+        "entityId": { "type": "string", "maxLength": 64 },
+        "details": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "timestamp", "action", "entity", "details"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "User profiles and RBAC permissions."
+    },
+    "/employees/{employeeId}": {
+      "schema": "employee",
+      "description": "Employee directory."
+    },
+    "/attendance_records/{attendanceId}": {
+      "schema": "attendanceRecord",
+      "description": "Monthly attendance matrix."
+    },
+    "/absence_requests/{requestId}": {
+      "schema": "absenceRequest",
+      "description": "Absence requests with approval workflow."
+    },
+    "/delay_occurrences/{delayId}": {
+      "schema": "delayOccurrence",
+      "description": "Delay logs."
+    },
+    "/lunch_intervals/{lunchId}": {
+      "schema": "lunchInterval",
+      "description": "Lunch interval tracking."
+    },
+    "/hour_bank_transactions/{transactionId}": {
+      "schema": "hourBankTransaction",
+      "description": "Hour bank financial and time ledger."
+    },
+    "/indicator_configurations/{configId}": {
+      "schema": "indicatorConfig",
+      "description": "Configurable goals and weights."
+    },
+    "/monthly_closings/{closingId}": {
+      "schema": "monthlyClosing",
+      "description": "Lock states for months."
+    },
+    "/audit_logs/{logId}": {
+      "schema": "auditLog",
+      "description": "System modification audit logs."
+    }
+  }
+}

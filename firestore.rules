@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'luiz.workset@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         getUserData().role == 'admin')
+      );
+    }
+
+    function isManager() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (getUserData().role in ['admin', 'manager']);
+    }
+
+    function isSupervisor() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (getUserData().role in ['admin', 'manager', 'supervisor']);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (isAdmin() || (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])));
+      allow delete: if isAdmin();
+    }
+
+    // Employees collection
+    match /employees/{employeeId} {
+      allow read: if isSignedIn();
+      allow write: if isSupervisor();
+    }
+
+    // Attendance records
+    match /attendance_records/{attendanceId} {
+      allow read: if isSignedIn();
+      allow write: if isSupervisor();
+    }
+
+    // Absence requests
+    match /absence_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isManager() || (isSignedIn() && request.resource.data.status == resource.data.status);
+      allow delete: if isAdmin();
+    }
+
+    // Delay occurrences
+    match /delay_occurrences/{delayId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Lunch intervals
+    match /lunch_intervals/{lunchId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Hour bank transactions
+    match /hour_bank_transactions/{transactionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isManager();
+      allow delete: if isAdmin();
+    }
+
+    // Indicator configurations
+    match /indicator_configurations/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Monthly closings
+    match /monthly_closings/{closingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Audit logs
+    match /audit_logs/{logId} {
+      allow read: if isManager();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Immutable audit log
+    }
+  }
+}
